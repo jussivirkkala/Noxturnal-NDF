@@ -34,7 +34,7 @@ function nox=ndf(file,nox)
 %   d=[d sin(2*pi.*t*f)*100e-6];
 % end
 % nox.data=d;
-% ndf('trace.ndf',nox);  % Create NDF file
+% ndf('trace.ndf',nox);  % create NDF file
 
 % @jussivirkkala
 % 2020-04-26 Adding .file field.
