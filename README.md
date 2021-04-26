@@ -2,7 +2,7 @@
  
 Simple utilities for accessing Noxturnal  https://noxmedical.com/products/noxturnal-software/ data files .ndf.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
 
-Matlab reading and writing.
+Matlab reading and writing (ndf.m).
 ```
 1) Reading ndf
 
