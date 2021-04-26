@@ -20,7 +20,7 @@ function nox=ndf(file,nox)
 % 2) Writing ndf. Provide complete ascii .header or needed fields
 %
 % clear nox
-% nox.Type='EOG.MS'; 
+% nox.Type='Sine100Hz-100uv'; 
 % nox.Unit='V'          % default
 % nox.Label=nox.Type;   % default   
 % nox.Format='Int16'    % default
@@ -34,7 +34,7 @@ function nox=ndf(file,nox)
 %   d=[d sin(2*pi.*t*f)*100e-6];
 % end
 % nox.data=d;
-% ndf('trace.ndf',nox);  % create NDF file
+% ndf('Sine100Hz-100uV.ndf',nox);  % create NDF file
 
 % @jussivirkkala
 % 2020-04-26 Adding .file field.
@@ -97,8 +97,10 @@ end
 
 nox.file=file;
 nox=[];
+nox.t=[];
 nox.data=[];
 nox.start=[];
+nox.end=[];
 nox.gap=[];
 nox.samplingRateDouble=[];
 
@@ -106,34 +108,34 @@ while not(feof(f)),
     % Type and length
     typ=fread(f,1,'uint16');
     if ~isempty(typ),
-    len=fread(f,1,'uint32');
-    switch typ
-        case 144 
-            if isfield(nox,'field144'),
-                error('Only single field144 supported');
-            end            
-            nox.field144=fread(f,1,'double');
-        case 1 % hash
-            if isfield(nox,'hash'),
-                error('Only single hash supported');
-            end            
-            d=fread(f,len/2,'uint16');
-            nox.hash=char(d)';            
-        case 512 % start time
-            d=fread(f,len/2,'uint16');
-            nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS.FFF'); % MISSING US
-        case 256 % header
-            if isfield(nox,'header'),
-                error('Only single header supported');
-            end
-            d=fread(f,len/2,'uint16');
-            nox.header=char(d(find(d~=0))');
-            nox.header=strrep(nox.header,'°','Angle');
-            xmlStream = java.io.StringBufferInputStream(nox.header);
-            xDoc = xmlread(xmlStream);
-            for i=0:xDoc.item(0).getChildNodes.getLength-1,
-                n=xDoc.item(0).getChildNodes.item(i).getTagName;
-                n=char(n);
+        len=fread(f,1,'uint32');
+        switch typ
+            case 144 
+                check(nox,'field144');
+                nox.field144=fread(f,1,'double');
+            case 1 % hash
+                check(nox,'hash');
+                d=fread(f,len/2,'uint16');
+                nox.hash=char(d)';            
+            case 512 % start time
+                d=fread(f,len/2,'uint16');
+                nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS.FFF'); % MISSING US
+                if length(nox.start)>1,
+                    nox.gap(end+1)=(nox.start(end)-nox.end(end))*24*3600;
+                end
+            case 256 % header
+                check(nox,'header');
+                if isfield(nox,'header'),
+                    error('Only single header supported');
+                end
+                d=fread(f,len/2,'uint16');
+                nox.header=char(d(find(d~=0))');
+                nox.header=strrep(nox.header,'°','Angle');
+                xmlStream = java.io.StringBufferInputStream(nox.header);
+                xDoc = xmlread(xmlStream);
+                for i=0:xDoc.item(0).getChildNodes.getLength-1,
+                    n=xDoc.item(0).getChildNodes.item(i).getTagName;
+                    n=char(n);
  % <Properties>
  % <Item><Key>Device_Serial</Key><Type>System.String</Type><Value>20080298</Value></Item>
  % <Item><Key>Device_Type</Key><Type>System.String</Type><Value>T3</Value></Item>
@@ -146,52 +148,51 @@ while not(feof(f)),
  % <Item><Key>Oximeter_Serial</Key><Type>System.String</Type><Value>144587</Value></Item>
  % <Item><Key>HASH</Key><Type>System.String</Type><Value>33379607-c3c1-4066-87bf-f23bb6a450e9</Value></Item><Item>
  % <Key>Version</Key><Type>System.Int32</Type><Value>2</Value></Item></Properties>
- 
-                if strcmp(n,'Properties'),
-                    for j=0:xDoc.item(0).getChildNodes.item(i).getLength-1,                        
-                        properties=char(xDoc.item(0).getChildNodes.item(i).item(j).getChildNodes.item(0).item(0).getNodeValue);                   
-                        value=char(xDoc.item(0).getChildNodes.item(i).item(j).getChildNodes.item(2).item(0).getNodeValue);                      
-                        nox.Properties.(properties)=value;
+                    if strcmp(n,'Properties'),
+                        for j=0:xDoc.item(0).getChildNodes.item(i).getLength-1,                        
+                            properties=char(xDoc.item(0).getChildNodes.item(i).item(j).getChildNodes.item(0).item(0).getNodeValue);                   
+                            value=char(xDoc.item(0).getChildNodes.item(i).item(j).getChildNodes.item(2).item(0).getNodeValue);                      
+                            nox.Properties.(properties)=value;
+                        end
+                    else
+                        if ~isempty(xDoc.item(0).getChildNodes.item(i).item(0)),
+                            v=xDoc.item(0).getChildNodes.item(i).item(0).getNodeValue;
+                            v=char(v);
+                            check(nox,n);
+                            nox.(n)=v;
+                        end
                     end
-                else
-                if ~isempty(xDoc.item(0).getChildNodes.item(i).item(0)),
-                    v=xDoc.item(0).getChildNodes.item(i).item(0).getNodeValue;
-                    v=char(v);
-                    if isfield(nox,n),
-                        error('Two fields with same name')
-                    end
-                    nox.(n)=v;
                 end
+                nox.Scale=eval(nox.Scale); % Numerical values
+                nox.Offset=eval(nox.Offset);
+                nox.SamplingRate=eval(nox.SamplingRate);
+            case 513 % Data
+                switch nox.Format
+                    case 'Byte'
+                        d=fread(f,len,'uint8');
+                        d=mu2lin(d);
+                        nox.data=[nox.data;d*nox.Scale+nox.Offset];                                  
+                    case 'ByteMuLaw'
+                        d=fread(f,len,'uint8');
+                        d=mu2lin(d);
+                        nox.data=[nox.data;d*nox.Scale+nox.Offset];                    
+                    case 'Int16'
+                        d=fread(f,len/2,'int16');
+                        nox.data=[nox.data;d*nox.Scale+nox.Offset];
+                    case 'Int32'
+                        d=fread(f,len/4,'int32');
+                        nox.data=[nox.data;d*nox.Scale+nox.Offset];
+                    otherwise
+                        error(['Unsupported format ' num2str(nox.Format)])
                 end
-            end
-            nox.Scale=eval(nox.Scale); % Numerical values
-            nox.Offset=eval(nox.Offset);
-            nox.SamplingRate=eval(nox.SamplingRate);
-        case 513 % Data
-            switch nox.Format
-                case 'Byte'
-                    d=fread(f,len,'uint8');
-                    d=mu2lin(d);
-                    nox.data=[nox.data;d*nox.Scale+nox.Offset];                                  
-                case 'ByteMuLaw'
-                    d=fread(f,len,'uint8');
-                    d=mu2lin(d);
-                    nox.data=[nox.data;d*nox.Scale+nox.Offset];                    
-                case 'Int16'
-                    d=fread(f,len/2,'int16');
-                    nox.data=[nox.data;d*nox.Scale+nox.Offset];
-                case 'Int32'
-                    d=fread(f,len/4,'int32');
-                    nox.data=[nox.data;d*nox.Scale+nox.Offset];
-                otherwise
-                    error(['Unsupported format ' num2str(nox.Format)])
-            end
-        case 514 % Sampling rate double
-               nox.samplingRateDouble(end+1)=fread(f,1,'double');
-        otherwise
-            nox.(['field' num2str(typ)])=fread(f,len,'uint8');
-            disp(['Unknown type ' num2str(typ), ' len ' num2str(len)])
-    end
+                nox.t=[nox.t;nox.start(end)+(0:1:(length(d)-1))'/24/3600/nox.SamplingRate]; 
+                nox.end(end+1)=nox.t(end);
+            case 514 % Sampling rate double
+                nox.samplingRateDouble(end+1)=fread(f,1,'double');
+            otherwise
+                nox.(['field' num2str(typ)])=fread(f,len,'uint8');
+                disp(['Unknown type ' num2str(typ), ' len ' num2str(len)])
+        end
     end
 end
 fclose(f);
@@ -201,8 +202,7 @@ fclose(f);
 function nox=write_nox(file,nox)
 
 if ~isfield(nox,'header'),
-    if ~isfield(nox,'Label'),nox.Label=nox.Type,end % .Type required
-
+    if ~isfield(nox,'Label'),nox.Label=nox.Type,end 
     % header 256
     s=strcat('<Channel><Name>NOX</Name><Label>',nox.Label,'</Label><SourceType>Raw</SourceType>');
     s=strcat(s,'<Unit>',nox.Unit,'</Unit><HASH /><Source /><DeviceID /><DeviceSerial /><ChannelNumber>-1</ChannelNumber>');
@@ -214,7 +214,7 @@ if ~isfield(nox,'header'),
     s=strcat(s,'<Properties><Item><Key>AutomaticDerivedSignal</Key><Type>System.Boolean</Type><Value>True</Value></Item></Properties></Channel>');
 else
     if isfield(nox,'Type'),
-        error('You should either complete .header or necessary fields');
+        error('You should either have complete .header or necessary fields');
     end
     s=nox.header;    
 end
