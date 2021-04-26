@@ -24,17 +24,17 @@ function nox=ndf(file,nox)
 % nox.Unit='V'          % default
 % nox.Label=nox.Type;   % default   
 % nox.Format='Int16'    % default
-% nox.Offset=0;
+% nox.Offset=0;         % default
 % nox.start=floor(now()*24*60*2)/(24*60*2);
 % nox.Scale=1e-6;
 % nox.SamplingRate=100;
 % t=1/nox.SamplingRate:1/nox.SamplingRate:90;
-% d=[];
-% for f=1:1:100,
+% d=[];                 % 1-100 Hz, 100 uV
+% for f=1:1:100,        
 %   d=[d sin(2*pi.*t*f)*100e-6];
 % end
-% nox.data=d;
-% ndf('Sine100Hz-100uV.ndf',nox);  % create NDF file
+% nox.data=d;           % create ndf file
+% ndf('Sine100Hz-100uV.ndf',nox);  
 
 % @jussivirkkala
 % 2020-04-26 Adding .file field.
@@ -202,7 +202,10 @@ fclose(f);
 function nox=write_nox(file,nox)
 
 if ~isfield(nox,'header'),
-    if ~isfield(nox,'Label'),nox.Label=nox.Type,end 
+    if ~isfield(nox,'Label'),nox.Label=nox.Type;end 
+    if ~isfield(nox,'Unit'),nox.Unit='V';end
+    if ~isfield(nox,'Format');nox.Format='Int16';end
+    if ~isfield(nox,'Offset'),nox.Offset=0;end
     % header 256
     s=strcat('<Channel><Name>NOX</Name><Label>',nox.Label,'</Label><SourceType>Raw</SourceType>');
     s=strcat(s,'<Unit>',nox.Unit,'</Unit><HASH /><Source /><DeviceID /><DeviceSerial /><ChannelNumber>-1</ChannelNumber>');
