@@ -38,7 +38,7 @@ function nox=ndf(file,nox,field)
 % ndf('Sine100Hz-100uV.ndf',nox);  
 
 % @jussivirkkala
-% 2020-04-26 Adding .file field.
+% 2021-04-26 Adding .file field.
 % 2021-04-22 Writing Noxturnal ndf files.
 % 2021-01-18 Reading Noxturnal ndf files.
 % 2020-12-29 File format reverse engineering.
