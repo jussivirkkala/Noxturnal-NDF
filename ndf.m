@@ -1,4 +1,4 @@
-function nox=ndf(file,nox)
+function nox=ndf(file,nox,field)
 % Loading and writing Noxturnal (www.noxmedical.com) data file ndf. THE SOFTWARE 
 % IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
 %
@@ -11,13 +11,14 @@ function nox=ndf(file,nox)
 % datestr(nox.start)
 % datestr(nox.end)
 %
-% Plotting
+% Plotting. Notice that data can contain multiple blocks.
 %
 % plot(nox.t,nox.data);
 % ylabel([label ' (uV)'])
 % datetick('x','HH.MM.SS','keeplimits')  
 %
-% 2) Writing ndf. Provide complete ascii .header or needed fields
+% 2) Writing ndf. Provide complete ascii .header or needed fields.
+% Currently not supporting multiple blocks.
 %
 % clear nox
 % nox.Type='Sine100Hz-100uv'; 
@@ -50,7 +51,7 @@ end
 %% Dialog for file, different commands
 %
 if ischar(file),
-    if length(file)==0,
+    if length(file)==0, % Reading file
         [fileName, pathName] = uigetfile({'*.ndf','*.ndf'},'Select Noxturnal ndf file');
         if fileName==0,
             error('Canceled')
@@ -59,7 +60,7 @@ if ischar(file),
             file=[pathName fileName];
         end
     end
-    if nargin==2,
+    if nargin==2, % Writing file
         if exist(file,'file')
             error('File already exist');
         end          
@@ -71,17 +72,23 @@ if ischar(file),
         nox=read_nox(file);
     end
 else
-    cmd=upper(cmd);
-    switch cmd
+    cmd=upper(nox);
+    nox=file;
+    switch upper(cmd)
+        case 'FIELD',
+            for i=1:length(field),
+            end
         otherwise
             error(['Unknown command ' cmd]);
     end
     return
 end
 
+%% Checking for field
+%
 function check(nox,field)
 if isfield(nox,field),
-    error('Field exist')
+    error(['Supporting only single field: ' field])
 end
 
 %% Reading file
@@ -95,8 +102,8 @@ if sum(abs(h-[78;79;88;3])) % NOX
     error('Not ndf file, should start with NOX')
 end
 
-nox.file=file;
 nox=[];
+nox.file=file;
 nox.t=[];
 nox.data=[];
 nox.start=[];
@@ -125,9 +132,6 @@ while not(feof(f)),
                 end
             case 256 % header
                 check(nox,'header');
-                if isfield(nox,'header'),
-                    error('Only single header supported');
-                end
                 d=fread(f,len/2,'uint16');
                 nox.header=char(d(find(d~=0))');
                 nox.header=strrep(nox.header,'°','Angle');
@@ -185,13 +189,17 @@ while not(feof(f)),
                     otherwise
                         error(['Unsupported format ' num2str(nox.Format)])
                 end
-                nox.t=[nox.t;nox.start(end)+(0:1:(length(d)-1))'/24/3600/nox.SamplingRate]; 
-                nox.end(end+1)=nox.t(end);
+                if len>0
+                    nox.t=[nox.t;nox.start(end)+(0:1:(length(d)-1))'/24/3600/nox.SamplingRate]; 
+                    nox.end(end+1)=nox.t(end);
+                else
+                    disp('Length 0');
+                end
             case 514 % Sampling rate double
                 nox.samplingRateDouble(end+1)=fread(f,1,'double');
             otherwise
                 nox.(['field' num2str(typ)])=fread(f,len,'uint8');
-                disp(['Unknown type ' num2str(typ), ' len ' num2str(len)])
+                disp(['Unknown type ' num2str(typ), ' len ' num2str(len)]);
         end
     end
 end
