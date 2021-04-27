@@ -2,7 +2,12 @@
  
 Simple utilities for accessing Noxturnal  https://noxmedical.com/products/noxturnal-software/ data files .ndf.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
 
-Matlab reading and writing [ndf.m](ndf.m)
+# .ndb
+
+Event files are SQLite format. You can use e.g. https://sqlitebrowser.org/ to read files.
+
+# .ndf
+Matlab reading and writing [ndf.m](ndf.m). Incomplete reverse engineering of file format. You can download demonstration recordings from https://support.noxmedical.com/hc/en-us/sections/201822583-PG-Demonstration-Recordings.
 
 ```
 1) Reading ndf
