@@ -1,6 +1,6 @@
 # Nox
  
-Simple utilities for accessing Noxmedical, Noxturnal  https://noxmedical.com/products/noxturnal-software/ data files .ndf.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
+Utilities (Matlab) for accessing Noxmedical, Noxturnal  https://noxmedical.com/products/noxturnal-software/ data files .ndf.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
 
 # .ndb
 
