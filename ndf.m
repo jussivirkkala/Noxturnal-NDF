@@ -38,6 +38,8 @@ function nox=ndf(file,nox,field)
 % ndf('Sine100Hz-100uV.ndf',nox);  
 
 % @jussivirkkala
+* 2023-09-27 Writing multiple block
+% 2023-05-13 Reading corrupt file. Description of us
 % 2021-04-26 Adding .file field.
 % 2021-04-22 Writing Noxturnal ndf files.
 % 2021-01-18 Reading Noxturnal ndf files.
@@ -119,6 +121,7 @@ while not(feof(f)),
         switch typ
             case 144 
                 check(nox,'field144');
+                nox.field144Pos=ftell(f);
                 nox.field144=fread(f,1,'double');
             case 1 % hash
                 check(nox,'hash');
@@ -126,14 +129,25 @@ while not(feof(f)),
                 nox.hash=char(d)';            
             case 512 % start time
                 d=fread(f,len/2,'uint16');
-                nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS.FFF'); % MISSING US
+                if len==36,
+                    warning("Start time length not correct")
+                    nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS'); % CORRUPT FILE 
+                else
+                    nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS.FFF'); % MISSING MICRO SEOCOND RESOLUTION
+                end
                 if length(nox.start)>1,
                     nox.gap(end+1)=(nox.start(end)-nox.end(end))*24*3600;
                 end
             case 256 % header
                 check(nox,'header');
+                nox.header_pos=ftell(f);
                 d=fread(f,len/2,'uint16');
+                nox.header_uint16=d;              
                 nox.header=char(d(find(d~=0))');
+                % 2023-08-08
+                if sum(d==0),
+                    warning('Header 0 values')
+                end
                 nox.header=strrep(nox.header,'°','Angle');
                 xmlStream = java.io.StringBufferInputStream(nox.header);
                 xDoc = xmlread(xmlStream);
@@ -196,6 +210,7 @@ while not(feof(f)),
                     disp('Length 0');
                 end
             case 514 % Sampling rate double
+                nox.samplingRateDoublePos=ftell(f);
                 nox.samplingRateDouble(end+1)=fread(f,1,'double');
             otherwise
                 nox.(['field' num2str(typ)])=fread(f,len,'uint8');
@@ -238,6 +253,8 @@ fwrite(f,256,'uint16');
 fwrite(f,length(s)*2,'uint32');
 fwrite(f,s,'uint16');
 nox.header=s;
+
+% multiple segments
 
 % time 512
 fwrite(f,512,'int16');
