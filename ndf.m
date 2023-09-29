@@ -38,7 +38,7 @@ function nox=ndf(file,nox,field)
 % ndf('Sine100Hz-100uV.ndf',nox);  
 
 % @jussivirkkala
-* 2023-09-27 Writing multiple block
+% 2023-09-27 Writing multiple block
 % 2023-05-13 Reading corrupt file. Description of us
 % 2021-04-26 Adding .file field.
 % 2021-04-22 Writing Noxturnal ndf files.
