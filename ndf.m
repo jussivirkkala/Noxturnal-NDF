@@ -2,23 +2,24 @@ function nox=ndf(file,nox,field)
 % Loading and writing Noxturnal (www.noxmedical.com) data file ndf. THE SOFTWARE 
 % IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
 %
-% ndf                       % help ndf
+% ndf                           % help ndf
 %
 % 1) Reading ndf
 %
-% nox=ndf('')               % dialog
-% nox=ndf('Pressure.ndf')   % load data
-% datestr(nox.start)
-% datestr(nox.end)
+% signal=ndf('')                % dialog
+% pressure=ndf('Pressure.ndf') 
+% load data
+% datestr(pressure.start)
+% datestr(pressure.end)
 %
-% Plotting. Notice that data can contain multiple blocks.
+% Plotting. Notice that data can contain multiple blocks. Handling of
+% blocks is changed 2024-04-05. 
 %
-% plot(nox.t,nox.data);
+% plot(pressure.t,pressure.data);
 % ylabel([label ' (uV)'])
 % datetick('x','HH.MM.SS','keeplimits')  
 %
-% 2) Writing ndf. Provide complete ascii .header or needed fields.
-% Currently not supporting multiple blocks.
+% 2) Writing ndf. Provide complete .header_uint16 or .header or needed fields.
 %
 % clear nox
 % nox.Type='Sine100Hz-100uv'; 
@@ -38,7 +39,9 @@ function nox=ndf(file,nox,field)
 % ndf('Sine100Hz-100uV.ndf',nox);  
 
 % @jussivirkkala
-% 2023-09-27 Writing multiple block
+% 2025-03-10 Commenting out corrupt file.
+% 2024-06-05 Writing blocks
+% 2024-04-05 Breaking change of blocks. 
 % 2023-05-13 Reading corrupt file. Description of us
 % 2021-04-26 Adding .file field.
 % 2021-04-22 Writing Noxturnal ndf files.
@@ -64,9 +67,9 @@ if ischar(file),
     end
     if nargin==2, % Writing file
         if exist(file,'file')
-            error('File already exist');
+            error(['File ' file ' already exist']);
         end          
-        nox=write_nox(file,nox)
+        nox=write_nox(file,nox);
     else        
         if ~exist(file,'file'),
             error(['No file: ' file]);
@@ -77,10 +80,8 @@ else
     cmd=upper(nox);
     nox=file;
     switch upper(cmd)
-        case 'FIELD',
-            for i=1:length(field),
-            end
         otherwise
+            fclose(f);
             error(['Unknown command ' cmd]);
     end
     return
@@ -95,33 +96,49 @@ end
 
 %% Reading file
 %
-% 2021-04-22
 function nox=read_nox(file)
 f=fopen(file,'rb');
 h=fread(f,4,'uint8');
 
 if sum(abs(h-[78;79;88;3])) % NOX
-    error('Not ndf file, should start with NOX')
+    error('Not ndf file, should start with NOX')
 end
 
 nox=[];
 nox.file=file;
-nox.t=[];
-nox.data=[];
+nox.t={}; % 2024-03-26 Changed output
+nox.data={};
 nox.start=[];
 nox.end=[];
 nox.gap=[];
 nox.samplingRateDouble=[];
+nox.fields.len=[];
+nox.fields.type=[];
+nox.fields.pos=[];
+nox.start_raw={};
+nox.warning={};
 
-while not(feof(f)),
+while not(feof(f)),    
     % Type and length
+    nox.fields.pos(end+1)=ftell(f);
     typ=fread(f,1,'uint16');
+    if isempty(typ), % 2023-11-04
+        nox.warning{end+1}='empty type';
+    else
+        nox.fields.type(end+1)=typ;
+    end
     if ~isempty(typ),
         len=fread(f,1,'uint32');
+        % if len==3780340,len=936800,end
+        if isempty(len),
+            nox.warning{end+1}='empty length';
+            break;
+        end
+        nox.fields.len(end+1)=len;
         switch typ
             case 144 
                 check(nox,'field144');
-                nox.field144Pos=ftell(f);
+                % nox.field144Pos=ftell(f);
                 nox.field144=fread(f,1,'double');
             case 1 % hash
                 check(nox,'hash');
@@ -129,11 +146,15 @@ while not(feof(f)),
                 nox.hash=char(d)';            
             case 512 % start time
                 d=fread(f,len/2,'uint16');
-                if len==36,
-                    warning("Start time length not correct")
-                    nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS'); % CORRUPT FILE 
+                nox.start_raw{end+1}=char(d)';
+                if len~=44,
+                    disp(['start time ' nox.start_raw{end} ' length should be 44, not ' int2str(len) ' pos ' int2str(nox.fields.pos(end))]  ),
+                end
+                if len>39 & len<45, % len==44, 
+                    nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS.FFF'); % SKIPPING MICRO SECOND RESOLUTION
                 else
-                    nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS.FFF'); % MISSING MICRO SEOCOND RESOLUTION
+                    error(strcat(char(d)'," start time not correct"))
+                    % nox.start(end+1)=datenum(char(d)','yyyymmddTHHMMSS'); % CORRUPT FILE 
                 end
                 if length(nox.start)>1,
                     nox.gap(end+1)=(nox.start(end)-nox.end(end))*24*3600;
@@ -144,11 +165,13 @@ while not(feof(f)),
                 d=fread(f,len/2,'uint16');
                 nox.header_uint16=d;              
                 nox.header=char(d(find(d~=0))');
-                % 2023-08-08
+                % 2023-08-08 Usually contains extra zeros
                 if sum(d==0),
-                    warning('Header 0 values')
+                    % warning('header 0 values')
+                    % nox.warning{end+1}='header 0 values';
                 end
-                nox.header=strrep(nox.header,'°','Angle');
+                nox.header=strrep(nox.header,'°','Angle'); 
+
                 xmlStream = java.io.StringBufferInputStream(nox.header);
                 xDoc = xmlread(xmlStream);
                 for i=0:xDoc.item(0).getChildNodes.getLength-1,
@@ -188,7 +211,6 @@ while not(feof(f)),
                 switch nox.Format
                     case 'Byte'
                         d=fread(f,len,'uint8');
-                        d=mu2lin(d);
                         nox.data=[nox.data;d*nox.Scale+nox.Offset];                                  
                     case 'ByteMuLaw'
                         d=fread(f,len,'uint8');
@@ -197,38 +219,60 @@ while not(feof(f)),
                     case 'Int16'
                         d=fread(f,len/2,'int16');
                         nox.data=[nox.data;d*nox.Scale+nox.Offset];
+                    case 'UInt32'
+                        d=fread(f,len/4,'uint32');
+                        % nox.data=[nox.data;
+                        nox.data{end+1}=d*nox.Scale+nox.Offset;
                     case 'Int32'
                         d=fread(f,len/4,'int32');
-                        nox.data=[nox.data;d*nox.Scale+nox.Offset];
+                        % nox.data=[nox.data;
+                        nox.data{end+1}=d*nox.Scale+nox.Offset;
+                    case 'Double'
+                        d=fread(f,len/8,'double');
+                        % nox.data=[nox.data;
+                        nox.data{end+1}=d*nox.Scale+nox.Offset;                        
                     otherwise
                         error(['Unsupported format ' num2str(nox.Format)])
+                    if length(data)~=len,nox.warning{end+1}='length mismatch',end
                 end
                 if len>0
-                    nox.t=[nox.t;nox.start(end)+(0:1:(length(d)-1))'/24/3600/nox.SamplingRate]; 
-                    nox.end(end+1)=nox.t(end);
+                    % nox.t=[nox.t; 2024-03-26 Breaking change
+                    nox.t{end+1}=[nox.start(end)+(0:1:(length(d)-1))'/24/3600/nox.SamplingRate]; 
+                    nox.end(end+1)=nox.t{end}(end);
                 else
                     disp('Length 0');
                 end
             case 514 % Sampling rate double
-                nox.samplingRateDoublePos=ftell(f);
+                % nox.samplingRateDoublePos=ftell(f);
                 nox.samplingRateDouble(end+1)=fread(f,1,'double');
             otherwise
                 nox.(['field' num2str(typ)])=fread(f,len,'uint8');
-                disp(['Unknown type ' num2str(typ), ' len ' num2str(len)]);
+                disp(['Unknown type ' num2str(typ), ' len ' num2str(len) ' pos ' int2str(nox.fields.pos(end)) ]);
         end
+    % Correcting
+        if length(nox.fields.len)==4,
+           %fseek(f,4,0)
+        end    
     end
 end
 fclose(f);
+nox.segments=length(nox.t);
 
 %% Writing Noxturnal file
-%
+% 2024-04-05 Writing raw data 
 function nox=write_nox(file,nox)
 
 if ~isfield(nox,'header'),
     if ~isfield(nox,'Label'),nox.Label=nox.Type;end 
-    if ~isfield(nox,'Unit'),nox.Unit='V';end
+    if ~isfield(nox,['Un' ...
+            '' ...
+            'it']),nox.Unit='V';end
     if ~isfield(nox,'Format');nox.Format='Int16';end
     if ~isfield(nox,'Offset'),nox.Offset=0;end
+    if ~isfield(nox,'Scale'),nox.Scale=1;end
+    if ~isfield(nox,'start'),nox.start=now;end
+    if ~isfield(nox,'samplingRateDouble'),nox.samplingRateDouble=nox.SamplingRate;end
+    
     % header 256
     s=strcat('<Channel><Name>NOX</Name><Label>',nox.Label,'</Label><SourceType>Raw</SourceType>');
     s=strcat(s,'<Unit>',nox.Unit,'</Unit><HASH /><Source /><DeviceID /><DeviceSerial /><ChannelNumber>-1</ChannelNumber>');
@@ -240,43 +284,62 @@ if ~isfield(nox,'header'),
     s=strcat(s,'<Properties><Item><Key>AutomaticDerivedSignal</Key><Type>System.Boolean</Type><Value>True</Value></Item></Properties></Channel>');
 else
     if isfield(nox,'Type'),
-        error('You should either have complete .header or necessary fields');
+        error('Have either complete .header or necessary fields. Use trace=rmfield(trace,''header/Type'')');
     end
     s=nox.header;    
 end
+
 % start of file 78, 79, 88, 3
 f=fopen(file,'wb');
 fwrite(f,[78;79;88;3],'uint8');
 
+% header
+% if isfield
+s=char(s); % 2026-05-04
 s(end+1)=0;
 fwrite(f,256,'uint16');
 fwrite(f,length(s)*2,'uint32');
-fwrite(f,s,'uint16');
+fwrite(f,s,'uint16'); % 2024-06-05
 nox.header=s;
 
 % multiple segments
+if ~iscell(nox.data)
+     nox.data={nox.data};
+end
+nox.segments=length(nox.data);
 
-% time 512
-fwrite(f,512,'int16');
-% only ms resolution, format supports ns
-s=datestr(nox.start,'yyyymmddTHHMMSS.FFF000');
-fwrite(f,length(s)*2,'uint32');
-fwrite(f,s,'int16');
+for i=1:nox.segments
+    % time 512
+    fwrite(f,512,'int16');
+    % only ms resolution, format supports us
+    s=datestr(nox.start(i),'yyyymmddTHHMMSS.FFF000');
+    fwrite(f,length(s)*2,'uint32');
+    fwrite(f,s,'int16');
 
-% sampling rate 514
-fwrite(f,514,'int16'); 
-fwrite(f,8,'uint32');
-fwrite(f,nox.SamplingRate,'double');  
+    % sampling rate 514
+    fwrite(f,514,'int16'); 
+    fwrite(f,8,'uint32');
+    fwrite(f,nox.samplingRateDouble(i),'double');  % 2024-06-06
 
-% data 513
-nox.data=double(nox.data);
-fwrite(f,513,'int16');
-fwrite(f,length(nox.data)*2,'uint32');
-switch nox.Format
-    case 'Int16'
-        fwrite(f,(nox.data-nox.Offset)/nox.Scale,'int16');
-    otherwise
-        error(['Unsupported format ' nox.Format])
+    % data 513
+    data=double(nox.data{i});
+    fwrite(f,513,'int16');
+    switch nox.Format
+        case 'Byte'
+            fwrite(f,length(data),'byte');
+            fwrite(f,(data-nox.Offset)/nox.Scale,'byte');
+        case 'Int16'
+            fwrite(f,length(data)*2,'uint32');
+            fwrite(f,(data-nox.Offset)/nox.Scale,'int16');
+        case 'Int32'
+            fwrite(f,length(data)*4,'uint32');
+            fwrite(f,(data-nox.Offset)/nox.Scale,'int32');
+        case 'Double'
+            fwrite(f,length(data)*8,'uint32');
+            fwrite(f,(data-nox.Offset)/nox.Scale,'double');
+        otherwise
+            error(['Unsupported format ' nox.Format])
+    end
 end
 fclose(f);
 
