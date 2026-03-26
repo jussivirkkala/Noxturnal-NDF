@@ -37,3 +37,7 @@ ndf('Sine100Hz-100uV.ndf',nox);
 
 
 ```
+
+# ndf2edf
+
+Creating EDF based on multiple NDF. 
