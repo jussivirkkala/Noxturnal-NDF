@@ -3,10 +3,9 @@
 Utilities (Matlab) for accessing Noxmedical, Noxturnal  https://noxmedical.com/products/noxturnal-software/ data files .ndf.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND... (MIT license)
 
 # .nif
-See [https://github.com/SBerda/nox-nif-decoder](nox-nif-decoder)
+See [nox-nif-decoder](https://github.com/SBerda/nox-nif-decoder) repository.
 
 # .ndb
-
 Event files are SQLite format. You can use e.g. https://sqlitebrowser.org/ to read files.
 
 # .ndf
@@ -37,8 +36,6 @@ end
 nox.data=d;           % create ndf file
 ndf('Sine100Hz-100uV.ndf',nox);  
 ```
-
-
 
 # ndf2edf
 
